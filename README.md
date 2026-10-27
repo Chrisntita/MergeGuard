@@ -50,6 +50,38 @@ php artisan test
 
 The API health endpoint is `http://localhost:8000/api/health`. CORS allows the configured `FRONTEND_URL` origin.
 
+### Deploying the backend to Render with Docker
+
+Create a Render Web Service from the repository using the Docker runtime. Set Docker Context Directory to `backend` and Dockerfile Path to `backend/Dockerfile`. The image serves Laravel from `public/` with Apache and listens on Render's `PORT` environment variable (defaulting to `10000` for local runs). Set the Render health check path to `/api/health`.
+
+Configure these values in the Render service environment:
+
+- `APP_KEY`: generate a key outside the image with `php artisan key:generate --show` in `backend/`, then store the result as a Render secret.
+- `APP_ENV=production`, `APP_DEBUG=false`, and `APP_URL` set to the deployed API URL.
+- `DB_CONNECTION=pgsql` and `DATABASE_URL` set to the Render PostgreSQL internal connection URL. The existing individual `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` settings are also supported. If both `DB_URL` and `DATABASE_URL` are set, `DB_URL` takes precedence.
+- `FRONTEND_URL` set to the deployed frontend origin. Set `GEMINI_API_KEY` as a Render secret only if AI review should be enabled.
+
+Do not add `.env` files or credentials to the image. Render's container filesystem is ephemeral; Laravel storage and cache directories are writable in the container, but files written there do not persist across deployments or restarts.
+
+Do not run migrations from the container entrypoint. Before deploying a schema change, test the migration and take an appropriate database backup. Run `php artisan migrate --force` once as a Render Pre-Deploy Command for that deployment, or run it manually from a one-off shell when a pre-deploy command is unavailable. Use backward-compatible migrations when old and new application versions may overlap.
+
+To build and test locally from `backend/`, with Docker installed:
+
+```powershell
+$appKey = php artisan key:generate --show
+docker build -t mergeguard-api .
+docker run --rm -p 8000:10000 `
+  -e PORT=10000 `
+  -e "APP_KEY=$appKey" `
+  -e APP_URL=http://localhost:8000 `
+  -e DB_CONNECTION=pgsql `
+  -e DATABASE_URL='postgresql://user:password@host:5432/database' `
+  -e FRONTEND_URL=http://localhost:5173 `
+  mergeguard-api
+```
+
+Provide a disposable local PostgreSQL connection URL before testing database-backed requests. Generate the local key outside the container using `php artisan key:generate --show`; never use a real production key in local testing. Check `http://localhost:8000/api/health`.
+
 ### Code analysis API
 
 - `GET /api/languages` returns the supported language identifiers: `php`, `javascript`, `typescript`, and `python`.
