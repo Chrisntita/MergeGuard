@@ -1,0 +1,33 @@
+# Dependencies
+/frontend/node_modules/
+/backend/vendor/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+
+# Build output
+/frontend/dist/
+/backend/bootstrap/cache/*
+!/backend/bootstrap/cache/.gitkeep
+/backend/storage/*.key
+/backend/storage/framework/cache/data/*
+!/backend/storage/framework/cache/data/.gitkeep
+/backend/storage/framework/sessions/*
+!/backend/storage/framework/sessions/.gitkeep
+/backend/storage/framework/testing/*
+!/backend/storage/framework/testing/.gitkeep
+/backend/storage/framework/views/*
+!/backend/storage/framework/views/.gitkeep
+/backend/storage/logs/*
+!/backend/storage/logs/.gitkeep
+
+# Tooling
+/backend/.phpunit.cache/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
