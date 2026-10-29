@@ -439,6 +439,47 @@ class AnalysisEndpointTest extends TestCase
             ->assertJsonPath('findings.0.line', 1);
     }
 
+    public function test_php_request_input_interpolated_into_sql_is_reported_without_ai_review(): void
+    {
+        $response = $this->postJson('/api/analyze', [
+            'language' => 'php',
+            'code' => implode("\n", [
+                '<?php',
+                "\$id = \$_GET['id'];",
+                '$sql = "SELECT * FROM users WHERE id = \'$id\'";',
+                '$result = mysqli_query($conn, $sql);',
+            ]),
+        ])
+            ->assertOk()
+            ->assertJsonPath('ai_review', false)
+            ->assertJsonPath('ai_status', 'disabled')
+            ->assertJsonCount(0, 'ai_findings')
+            ->assertJsonPath('deterministic_findings.0.rule_id', 'security.sql-concatenation')
+            ->assertJsonPath('deterministic_findings.0.severity', 'high')
+            ->assertJsonPath('deterministic_findings.0.line', 3)
+            ->assertJsonPath('deterministic_findings.0.source', 'deterministic')
+            ->assertJsonPath('findings.0.rule_id', 'security.sql-concatenation')
+            ->assertJsonPath('summary.by_severity.high', 1);
+
+        $this->assertSame(1, $response->json('summary.total'));
+    }
+
+    public function test_php_prepared_statement_with_request_input_is_not_flagged_as_sql_concatenation(): void
+    {
+        $this->postJson('/api/analyze', [
+            'language' => 'php',
+            'code' => implode("\n", [
+                '<?php',
+                "\$id = \$_GET['id'];",
+                '$stmt = mysqli_prepare($conn, "SELECT * FROM users WHERE id = ?");',
+                'mysqli_stmt_bind_param($stmt, "s", $id);',
+                'mysqli_stmt_execute($stmt);',
+            ]),
+        ])
+            ->assertOk()
+            ->assertJsonCount(0, 'findings');
+    }
+
     public function test_parameterized_sql_query_is_not_flagged(): void
     {
         $this->postJson('/api/analyze', [

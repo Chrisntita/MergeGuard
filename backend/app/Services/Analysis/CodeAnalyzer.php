@@ -39,6 +39,7 @@ class CodeAnalyzer
         $lines = preg_split('/\R/', $code) ?: [];
         $inBlockComment = false;
         $inPythonTripleQuotedString = null;
+        $phpUserControlledVariables = [];
 
         foreach ($lines as $index => $line) {
             $lineNumber = $index + 1;
@@ -59,6 +60,10 @@ class CodeAnalyzer
                     $line,
                     $inPythonTripleQuotedString,
                 );
+            }
+
+            if ($language === 'php') {
+                $this->trackPhpUserControlledVariable($line, $phpUserControlledVariables);
             }
 
             if (in_array($language, ['javascript', 'typescript'], true)) {
@@ -139,12 +144,12 @@ class CodeAnalyzer
                 $this->addFindingIf(
                     $findings,
                     $seen,
-                    $this->matchesPhpSqlConcatenation($line),
+                    $this->matchesPhpSqlConcatenation($line, $phpUserControlledVariables),
                     'security.sql-concatenation',
                     'high',
-                    'SQL built from untrusted string concatenation',
+                    'SQL built from untrusted input',
                     $lineNumber,
-                    'A SQL query assembled by concatenating variables can allow injection if the value is not safely bound.',
+                    'A SQL query assembled with concatenated or interpolated request input can allow injection if the value is not safely bound.',
                     'Use prepared statements and parameterized queries instead of string concatenation.',
                 );
 
@@ -461,7 +466,10 @@ class CodeAnalyzer
         return preg_match('/(?<![A-Za-z0-9_])eval\s*\(/i', $sanitized) === 1;
     }
 
-    private function matchesPhpSqlConcatenation(string $line): bool
+    /**
+     * @param  array<string, true>  $userControlledVariables
+     */
+    private function matchesPhpSqlConcatenation(string $line, array $userControlledVariables): bool
     {
         if ($this->isCommentLine($line)) {
             return false;
@@ -471,8 +479,36 @@ class CodeAnalyzer
             return false;
         }
 
-        return preg_match('/\.\s*(?:\$[A-Za-z_][A-Za-z0-9_]*|[\'\"])/i', $line) === 1
-            || preg_match('/(?:\$[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:[\'\"]|\$[A-Za-z_][A-Za-z0-9_]*)/i', $line) === 1;
+        if (preg_match('/\.\s*(?:\$[A-Za-z_][A-Za-z0-9_]*|[\'\"])/i', $line) === 1
+            || preg_match('/(?:\$[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:[\'\"]|\$[A-Za-z_][A-Za-z0-9_]*)/i', $line) === 1) {
+            return true;
+        }
+
+        return preg_match(
+            '/"[^"\r\n]*\b(?:SELECT|INSERT|UPDATE|DELETE|REPLACE)\b[^"\r\n]*\$([A-Za-z_][A-Za-z0-9_]*)/i',
+            $line,
+            $matches,
+        ) === 1
+            && isset($userControlledVariables[$matches[1]]);
+    }
+
+    /**
+     * @param  array<string, true>  $userControlledVariables
+     */
+    private function trackPhpUserControlledVariable(string $line, array &$userControlledVariables): void
+    {
+        if ($this->isCommentLine($line)) {
+            return;
+        }
+
+        $sanitized = $this->stripQuotedStrings($line);
+        if (preg_match(
+            '/^\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^;]*\$_(?:GET|POST|REQUEST|COOKIE)\b/i',
+            $sanitized,
+            $matches,
+        ) === 1) {
+            $userControlledVariables[$matches[1]] = true;
+        }
     }
 
     private function matchesUnserializeOfUntrustedData(string $line): bool
