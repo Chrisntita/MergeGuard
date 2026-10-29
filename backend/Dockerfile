@@ -3,10 +3,10 @@ FROM php:8.4-apache-bookworm
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libonig-dev libpq-dev libxml2-dev libonig5 libpq5 libxml2 \
-    && docker-php-ext-install -j"$(nproc)" mbstring opcache pdo_pgsql xml \
-    && apt-mark manual libonig5 libpq5 libxml2 \
-    && apt-get purge -y --auto-remove libonig-dev libpq-dev libxml2-dev \
+    && apt-get install -y --no-install-recommends libonig-dev libpq-dev libxml2-dev libzip-dev libonig5 libpq5 libxml2 libzip4 unzip \
+    && docker-php-ext-install -j"$(nproc)" mbstring opcache pdo_pgsql xml zip \
+    && apt-mark manual libonig5 libpq5 libxml2 libzip4 unzip \
+    && apt-get purge -y --auto-remove libonig-dev libpq-dev libxml2-dev libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN a2enmod rewrite
